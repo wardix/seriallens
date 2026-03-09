@@ -7,6 +7,21 @@ import { join } from 'node:path';
 const app = new Hono();
 app.use('*', logger());
 
+// Middleware Keamanan: Validasi x-api-key
+const APP_API_KEY = process.env.API_KEY;
+if (APP_API_KEY) {
+  console.log('API Key security is ENABLED');
+  app.use('/extract-serial', async (c, next) => {
+    const requestKey = c.req.header('x-api-key');
+    if (requestKey !== APP_API_KEY) {
+      return c.json({ success: false, error: 'Unauthorized: Invalid or missing API Key' }, 401);
+    }
+    await next();
+  });
+} else {
+  console.warn('WARNING: API Key security is DISABLED. Set API_KEY in .env to enable.');
+}
+
 // Pastikan folder logs ada
 const LOG_DIR = join(process.cwd(), 'logs');
 const LOG_FILE = join(LOG_DIR, 'requests.log');
