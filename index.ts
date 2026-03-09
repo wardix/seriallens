@@ -44,6 +44,15 @@ app.post('/extract-serial', async (c) => {
     return c.json({ error: 'Please upload an image file under the field "image"' }, 400);
   }
 
+  // Validasi tipe file
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(image.type)) {
+    return c.json({
+      success: false,
+      error: `Invalid file type: ${image.type}. Only JPEG, PNG, and WebP are allowed.`
+    }, 400);
+  }
+
   try {
     const arrayBuffer = await image.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
