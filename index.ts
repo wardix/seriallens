@@ -29,7 +29,10 @@ app.post('/extract-serial', async (c) => {
     const arrayBuffer = await image.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    const prompt = "Please find and return only the serial number from this image. If there are multiple numbers, provide the one that most likely looks like a serial number (often labeled S/N or Serial No). Just return the number itself, no extra text.";
+    const prompt = "Act as an OCR specialist. Find and return ONLY the serial number from this image. " +
+                   "Look for labels like S/N, Serial No, or sequences of characters that look like a serial number. " +
+                   "IMPORTANT: If no serial number is found, return exactly 'NOT_FOUND'. " +
+                   "Return ONLY the serial number or 'NOT_FOUND', no explanations, no labels, no extra text.";
 
     const result = await model.generateContent([
       prompt,
@@ -41,10 +44,12 @@ app.post('/extract-serial', async (c) => {
       },
     ]);
 
-    const serialNumber = result.response.text().trim();
+    const rawResult = result.response.text().trim();
+    const serialNumber = rawResult === 'NOT_FOUND' ? null : rawResult;
 
     return c.json({
       success: true,
+      found: serialNumber !== null,
       serial_number: serialNumber
     });
   } catch (error: any) {
