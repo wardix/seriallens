@@ -1,7 +1,26 @@
 import { Hono } from 'hono';
+import { logger } from 'hono/logger';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { appendFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const app = new Hono();
+app.use('*', logger());
+
+// Pastikan folder logs ada
+const LOG_DIR = join(process.cwd(), 'logs');
+const LOG_FILE = join(LOG_DIR, 'requests.log');
+
+async function logRequest(filename: string, model: string, found: boolean, serial: string | null) {
+  try {
+    await mkdir(LOG_DIR, { recursive: true });
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] Model: ${model} | File: ${filename} | Found: ${found} | Serial: ${serial || 'N/A'}\n`;
+    await appendFile(LOG_FILE, logEntry);
+  } catch (err) {
+    console.error('Failed to write log:', err);
+  }
+}
 
 // Inisialisasi Gemini
 const apiKey = process.env.GOOGLE_API_KEY;
@@ -46,10 +65,14 @@ app.post('/extract-serial', async (c) => {
 
     const rawResult = result.response.text().trim();
     const serialNumber = rawResult === 'NOT_FOUND' ? null : rawResult;
+    const isFound = serialNumber !== null;
+
+    // Simpan log secara asinkron (tidak perlu menunggu log selesai)
+    logRequest(image.name, modelName, isFound, serialNumber);
 
     return c.json({
       success: true,
-      found: serialNumber !== null,
+      found: isFound,
       serial_number: serialNumber
     });
   } catch (error: any) {
