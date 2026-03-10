@@ -108,7 +108,12 @@ app.post('/extract-serial', async (c) => {
   }
 });
 
-export default {
-  port: process.env.PORT || 3000,
+const port = process.env.PORT || 3000;
+console.log(`\n🚀 SerialLens is starting...`);
+console.log(`📍 Port: ${port}`);
+console.log(`🧠 Model: ${modelName}`);
+
+Bun.serve({
+  port,
   fetch: app.fetch,
-};
+});
