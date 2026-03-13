@@ -11,7 +11,7 @@ app.use('*', logger());
 const APP_API_KEY = process.env.API_KEY;
 if (APP_API_KEY) {
   console.log('API Key security is ENABLED');
-  app.use('/extract-serial', async (c, next) => {
+  app.use('/extract-*', async (c, next) => {
     const requestKey = c.req.header('x-api-key');
     if (requestKey !== APP_API_KEY) {
       return c.json({ success: false, error: 'Unauthorized: Invalid or missing API Key' }, 401);
@@ -26,11 +26,11 @@ if (APP_API_KEY) {
 const LOG_DIR = join(process.cwd(), 'logs');
 const LOG_FILE = join(LOG_DIR, 'requests.log');
 
-async function logRequest(filename: string, model: string, found: boolean, serial: string | null) {
+async function logRequest(type: string, filename: string, model: string, found: boolean, result: string | null) {
   try {
     await mkdir(LOG_DIR, { recursive: true });
     const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] Model: ${model} | File: ${filename} | Found: ${found} | Serial: ${serial || 'N/A'}\n`;
+    const logEntry = `[${timestamp}] Type: ${type} | Model: ${model} | File: ${filename} | Found: ${found} | Result: ${result || 'N/A'}\n`;
     await appendFile(LOG_FILE, logEntry);
   } catch (err) {
     console.error('Failed to write log:', err);
@@ -91,8 +91,8 @@ app.post('/extract-serial', async (c) => {
     const serialNumber = rawResult === 'NOT_FOUND' ? null : rawResult;
     const isFound = serialNumber !== null;
 
-    // Simpan log secara asinkron (tidak perlu menunggu log selesai)
-    logRequest(image.name, modelName, isFound, serialNumber);
+    // Simpan log secara asinkron
+    logRequest('SERIAL', image.name, modelName, isFound, serialNumber);
 
     return c.json({
       success: true,
@@ -101,6 +101,62 @@ app.post('/extract-serial', async (c) => {
     });
   } catch (error: any) {
     console.error('Error extracting serial:', error);
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to process image'
+    }, 500);
+  }
+});
+
+app.post('/extract-mac', async (c) => {
+  const body = await c.req.parseBody();
+  const image = body['image'];
+
+  if (!(image instanceof File)) {
+    return c.json({ error: 'Please upload an image file under the field "image"' }, 400);
+  }
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(image.type)) {
+    return c.json({
+      success: false,
+      error: `Invalid file type: ${image.type}. Only JPEG, PNG, and WebP are allowed.`
+    }, 400);
+  }
+
+  try {
+    const arrayBuffer = await image.arrayBuffer();
+    const base64Image = Buffer.from(arrayBuffer).toString('base64');
+
+    const prompt = "Act as an OCR specialist. Find and return ONLY the MAC Address from this image. " +
+                   "MAC addresses are typically 12-digit hexadecimal characters, often separated by colons (:) or hyphens (-). " +
+                   "IMPORTANT: If no MAC Address is found, return exactly 'NOT_FOUND'. " +
+                   "Return ONLY the MAC Address or 'NOT_FOUND', no explanations, no labels, no extra text.";
+
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Image,
+          mimeType: image.type,
+        },
+      },
+    ]);
+
+    const rawResult = result.response.text().trim();
+    const macAddress = rawResult === 'NOT_FOUND' ? null : rawResult;
+    const isFound = macAddress !== null;
+
+    // Simpan log secara asinkron
+    logRequest('MAC', image.name, modelName, isFound, macAddress);
+
+    return c.json({
+      success: true,
+      found: isFound,
+      mac_address: macAddress
+    });
+  } catch (error: any) {
+    console.error('Error extracting MAC:', error);
     return c.json({
       success: false,
       error: error.message || 'Failed to process image'
